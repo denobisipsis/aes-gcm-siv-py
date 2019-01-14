@@ -12,49 +12,25 @@ import struct
 
 
 class Field(object):
-    # The field is defined by the irreducible polynomial
-    # x^128 + x^127 + x^126 + x^121 + 1
-    _MOD = sum((1 << a) for a in [0, 121, 126, 127, 128])
-
-    # x^-128 is equal to x^127 + x^124 + x^121 + x^114 + 1
-    _INV = sum((1 << a) for a in [0, 114, 121, 124, 127])
-
     @staticmethod
     def add(x, y):
         assert x < (1 << 128)
         assert y < (1 << 128)
         return x ^ y
 
+    @staticmethod	
+    def gf128_mul(x, y):
+    	R  = 0xe1000000000000000000000000000000
+    	z = 0
+    	for i in range(127, -1, -1):
+        	z ^= x * ((y >> i) & 1)      # if MSB is 0, XOR with 0, else XOR with x
+        	x = (x >> 1) ^ ((x & 1) * R) # shift and also reduce by R if overflow detected
+    	return z
+    
     @staticmethod
-    def mul(x, y):
-        assert x < (1 << 128), x
-        assert y < (1 << 128), y
-
-        res = 0
-        for bit in range(128):
-            if (y >> bit) & 1:
-                res ^= (2 ** bit) * x
-
-        return Field.mod(res, Field._MOD)
-
-    @staticmethod
-    def dot(a, b):
-        return Field.mul(Field.mul(a, b), Field._INV)
-
-    @staticmethod
-    def mod(a, m):
-        m2 = m
-        i = 0
-        while m2 < a:
-            m2 <<= 1
-            i += 1
-        while i >= 0:
-            a2 = a ^ m2
-            if a2 < a:
-                a = a2
-            m2 >>= 1
-            i -= 1
-        return a
+    def dot(a,b):
+        if a==0 : return a	    			        	       
+	return Field.gf128_mul(a, b)
 
 
 def polyval(h, xs):
@@ -72,9 +48,10 @@ class PolyvalIUF(object):
     of AES-GCM_SIV."""
 
     def __init__(self, h, nonce):
-        self._s = 0
-        self._h = b2i(h)
+        self._s = 0	
         self._nonce = bytearray(nonce)
+	H  = 0x40000000000000000000000000000000
+	self.h = Field.gf128_mul(b2i(h), H) 
 
     # TODO: update() is a bit sensitive w.r.t zero-padding, make sure
     # it's called so there is no superfluous zero-padding added in the middle
